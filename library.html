@@ -13,7 +13,6 @@
 })();
 </script>
 <title>Library</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23151210'/%3E%3Cpath d='M16 18h14c3 0 2 2 2 2v28s0-3-3-3H16z M48 18H34c-3 0-2 2-2 2v28s0-3 3-3h13z' fill='none' stroke='%23C9A39B' stroke-width='3.5' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -84,6 +83,7 @@
     color-scheme: light;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: radial-gradient(ellipse 120% 70% at 50% -10%, var(--glow) 0%, var(--bg) 62%) fixed;
@@ -113,7 +113,6 @@
   .btn:hover { border-color: var(--accent); color: var(--accent); }
   .btn.solid { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
   .btn.solid:hover { background: var(--accent-hover); color: var(--on-accent); }
-  a.btn { text-decoration: none; display: inline-block; }
   .btn:disabled { opacity: .6; cursor: default; }
 
   /* data source panel */
@@ -241,6 +240,21 @@
   .tag { position: absolute; top: 4px; right: 4px; z-index: 1; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 2px; }
   @media (prefers-reduced-motion: reduce) { .book .cover { transition: none; } .dot.loading { animation: none; } .book:hover .cover { transform: none; } }
 
+  /* re-read flag and search */
+  .flag { display: inline-block; margin-left: 10px; font-family: var(--body); font-style: normal; font-size: 11px; font-weight: 700; line-height: 1.5; padding: 0 8px; background: var(--accent); color: var(--on-accent); border-radius: 2px; vertical-align: middle; }
+  .searchbar { max-width: 520px; margin: 6px 0 22px; }
+  #results .result { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px 18px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .thumb { display: block; width: 58px; background: none; border: 0; padding: 0; text-align: left; }
+  .thumb .cover { position: relative; display: block; aspect-ratio: 2 / 3; width: 100%; box-shadow: 3px 3px 7px var(--shade); background: var(--leather); }
+  .thumb .cloth { padding: 4px; outline: 0; }
+  .thumb .cloth span { font-size: 8px; -webkit-line-clamp: 4; }
+  .thumb .cloth em { display: none; }
+  .rtitle { font-family: var(--display); font-style: italic; font-weight: 600; font-size: 23px; line-height: 1.15; }
+  .rmeta { color: var(--muted); font-size: 12.5px; }
+  .ractions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .result .err { grid-column: 1 / -1; }
+  @media (max-width: 640px) { #results .result { grid-template-columns: 58px 1fr; } .ractions { grid-column: 1 / -1; justify-content: flex-start; } }
+
   /* dialogs */
   dialog { background: var(--panel); color: var(--ink); border: 1px solid var(--accent-dim); padding: 0; max-width: 660px; width: calc(100% - 32px); box-shadow: 0 20px 60px var(--shade-deep); }
   dialog::backdrop { background: var(--backdrop); }
@@ -286,7 +300,6 @@
     <div class="tools">
       <div class="status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
       <div class="btns">
-        <a class="btn" href="index.html">Tasks</a>
         <button class="btn solid" type="button" data-add>Add a book</button>
         <button class="btn" id="refreshBtn" type="button">Refresh now</button>
         <button class="btn" id="themeBtn" type="button">Light mode</button>
@@ -361,6 +374,12 @@
 
     <section id="shelfSection">
       <h2>On the shelf</h2>
+      <div class="searchbar">
+        <label class="f" for="libSearch">Search your library
+          <input type="search" id="libSearch" placeholder="Title or author" autocomplete="off">
+        </label>
+      </div>
+      <div id="results" hidden></div>
       <div class="shelftabs" id="shelfTabs"></div>
       <div class="shelf" id="shelf"></div>
       <div class="empty" id="shelfEmpty" hidden>Nothing on this shelf yet.</div>
@@ -376,7 +395,7 @@
   <form class="formwrap" id="addForm" data-act="add" autocomplete="off">
     <button class="close" type="button" aria-label="Close" data-close>×</button>
     <h2>Add a book</h2>
-    <p class="hint">Saved as a new row in your Library tab. Fields marked * are required.</p>
+    <p class="hint" id="addHint">Saved as a new row in your Library tab. Fields marked * are required.</p>
     <p class="notice" id="writeNotice" hidden>Saving to your sheet is not set up yet. <button type="button" id="openSetup">Open the setup steps</button></p>
     <div class="grid2">
       <label class="f">Status *
@@ -421,13 +440,12 @@
 
 <script>
 /* ------------------------------------------------------------------
-   Not pre-connected, so this file is safe to host publicly. Enter your sheet once per device
-   in the Data source panel.
+   Pre-connected to your Reading Dashboard sheet (Library tab).
    writeUrl is the Apps Script web app link used for adding books and
    changing their status. You can paste it here or in the Data source panel.
 ------------------------------------------------------------------- */
 const PRESET = {
-  source: "",
+  source: "https://docs.google.com/spreadsheets/d/1IdwYCxWBD5rMSWK7-sA2ijwZAfr0fp3R4hVyZN7dOh0/edit",
   tab: "Library",
   refreshSeconds: 60,
   writeUrl: "",
@@ -571,13 +589,16 @@ function compute() {
     D.minIdx = Math.min(D.minIdx, idx); D.maxIdx = Math.max(D.maxIdx, idx);
   });
   D.years = Object.keys(D.yearTot).map(Number).sort((a, b) => a - b);
-  const seen = {};
-  S.books.filter(b => b.status === "finished").forEach(b => {
-    const k = (b.title + "|" + b.author).toLowerCase();
-    seen[k] = (seen[k] || 0) + 1;
+  // A book logged more than once is a re-read from its second reading onwards. Each reading stays its own entry.
+  const groups = {};
+  S.books.forEach(b => { (groups[bookKey(b)] = groups[bookKey(b)] || []).push(b); });
+  const rank = b => (b.fin ? b.fin.t : (b.status === "reading" ? 9e15 : -9e15));
+  Object.values(groups).forEach(g => {
+    const reads = g.filter(b => b.status === "finished" || b.status === "reading").sort((a, b) => (rank(a) - rank(b)) || (b.id - a.id));
+    reads.forEach((b, i) => { b.reread = i > 0; b.nth = i + 1; b.reads = reads.length; });
+    g.filter(b => b.status !== "finished" && b.status !== "reading").forEach(b => { b.reread = b.status === "tbr" && reads.length > 0; b.nth = reads.length + 1; b.reads = reads.length; });
   });
-  S.books.forEach(b => { b.reads = seen[(b.title + "|" + b.author).toLowerCase()] || 0; });
-  D.repeats = Object.values(seen).filter(n => n > 1).reduce((a, n) => a + n - 1, 0);
+  D.repeats = S.books.filter(b => b.status === "finished" && b.reread).length;
   const spans = fin.filter(b => b.start && b.fin.t >= b.start.t).map(b => (b.fin.t - b.start.t) / 864e5).sort((a, b) => a - b);
   if (spans.length >= 5) D.pace = Math.max(1, Math.round(spans[Math.floor(spans.length / 2)]));
 }
@@ -597,12 +618,15 @@ function niceMax(v) {
   const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e;
   return [1, 1.5, 2, 3, 4, 5, 6, 8, 10].find(x => f <= x + 1e-9) * e;
 }
+const bookKey = b => (b.title + "|" + b.author).toLowerCase().trim();
+function ordinal(n) { const v = n % 100; return n + (["th", "st", "nd", "rd"][(v - 20) % 10] || ["th", "st", "nd", "rd"][v] || "th"); }
+function fmtDate(d) { return d ? d.d + " " + MONTHS[d.m] + " " + d.y : ""; }
 function stars(r) { return r == null ? "" : '<span class="stars" style="--r:' + r + '" role="img" aria-label="' + r + ' out of 5"></span>'; }
 
 /* ---------- rendering ---------- */
 function render() {
   compute();
-  renderNow(); renderYears(); renderFigures(); renderMatrix(); renderChart(); renderShelf(); renderNotes();
+  renderNow(); renderYears(); renderFigures(); renderMatrix(); renderChart(); renderShelf(); renderResults(); renderNotes();
 }
 
 const RATING_OPTS = '<option value="">No rating</option>' + [5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1].map(r => '<option value="' + r + '">' + r + " of 5</option>").join("");
@@ -624,7 +648,7 @@ function nowCard(b) {
   const started = b.start ? b.start.d + " " + FULL[b.start.m] + " " + b.start.y : "";
   return '<article class="now"><div class="ribbon" aria-hidden="true"></div>' +
     '<button type="button" class="book" style="border:0;box-shadow:none;padding:0;background:none" data-id="' + b.id + '" aria-label="Details for ' + esc(b.title) + '"><span class="cover">' + coverHtml(b) + "</span></button>" +
-    "<div><h3>" + esc(b.title) + '</h3><p class="by">by ' + esc(b.author) + "</p>" +
+    "<div><h3>" + esc(b.title) + '</h3><p class="by">by ' + esc(b.author) + (b.reread ? ' <span class="flag">Re-read</span>' : "") + "</p>" +
     '<div class="nowfacts">' +
       (days != null ? '<div><div class="big">' + days + '</div><div class="biglabel">' + (days === 1 ? "day" : "days") + " with this book</div></div>" : "") +
       (b.pages ? '<div><div class="big">' + fmtN(b.pages) + '</div><div class="biglabel">pages</div></div>' : "") +
@@ -646,7 +670,9 @@ function renderYears() {
 function scopeTotals() { return S.year === "all" ? D.all : (D.yearTot[S.year] || blank()); }
 function renderFigures() {
   const t = scopeTotals();
-  const when = S.year === "all" ? (D.years.length ? "since " + D.years[0] : "") : "in " + S.year;
+  let when = S.year === "all" ? (D.years.length ? "since " + D.years[0] : "") : "in " + S.year;
+  const rr = S.books.filter(b => b.status === "finished" && b.fin && b.reread && (S.year === "all" || b.fin.y === +S.year)).length;
+  if (rr) when += (when ? ", " : "") + "including " + rr + (rr === 1 ? " re-read" : " re-reads");
   const avg = t.rN ? t.rSum / t.rN : null;
   $("figures").innerHTML =
     '<div class="fig"><div class="num">' + fmtN(t.books) + '</div><div class="figlabel">books finished</div><div class="figsub">' + when + "</div></div>" +
@@ -740,15 +766,54 @@ function renderShelf() {
   $("shelfEmpty").hidden = list.length > 0;
   $("shelf").innerHTML = list.map(b =>
     '<button type="button" class="book" data-id="' + b.id + '" title="' + esc(b.title) + (b.author ? " by " + esc(b.author) : "") + '" aria-label="' + esc(b.title) + '">' +
-    (b.reads > 1 && b.status === "finished" ? '<span class="tag" title="Logged ' + b.reads + ' times">×' + b.reads + "</span>" : "") +
+    (b.reread ? '<span class="tag" title="Re-read, ' + ordinal(b.nth) + ' time">Re-read</span>' : "") +
     '<span class="cover">' + coverHtml(b) + "</span></button>").join("");
 }
 function renderNotes() {
   const n = [];
   if (D.undated) n.push("<p>" + D.undated + (D.undated === 1 ? " finished book has" : " finished books have") + " no finish date, so " + (D.undated === 1 ? "it is" : "they are") + " left out of the monthly figures.</p>");
-  if (D.repeats) n.push("<p>" + D.repeats + " " + (D.repeats === 1 ? "entry repeats" : "entries repeat") + " a title already logged (re-reads). Each one counts again in the totals.</p>");
+  if (D.repeats) n.push("<p>" + D.repeats + (D.repeats === 1 ? " re-read is" : " re-reads are") + " listed as separate entries marked Re-read. Each one counts in the totals.</p>");
   if (S.books.some(b => b.status === "finished" && !/^https?:/i.test(b.img))) n.push("<p>Books without a web link in the Image column show a plain cloth cover.</p>");
   $("notes").innerHTML = n.join("");
+}
+
+function renderResults() {
+  const q = $("libSearch").value.trim().toLowerCase(), on = q.length > 0;
+  $("results").hidden = !on; $("shelfTabs").hidden = on; $("shelf").hidden = on;
+  if (!on) { $("shelfEmpty").hidden = shelfList().length > 0; return; }
+  $("shelfEmpty").hidden = true;
+  const words = q.split(/\s+/), groups = new Map();
+  S.books.forEach(b => { const k = bookKey(b); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); });
+  let hits = [];
+  groups.forEach(g => {
+    const hay = (g[0].title + " " + g[0].author).toLowerCase();
+    if (!words.every(w => hay.includes(w))) return;
+    const fin = g.filter(b => b.status === "finished").sort((a, b) => (b.fin ? b.fin.t : -1) - (a.fin ? a.fin.t : -1) || a.id - b.id);
+    hits.push({ g, fin, rep: fin[0] || g[0] });
+  });
+  hits.sort((a, b) => (b.fin.length > 0) - (a.fin.length > 0) || ((b.rep.fin ? b.rep.fin.t : 0) - (a.rep.fin ? a.rep.fin.t : 0)));
+  const total = hits.length;
+  hits = hits.slice(0, 40);
+  let h = '<p class="hint">' + (total ? total + (total === 1 ? " book matches “" : " books match “") + esc($("libSearch").value.trim()) + "”." + (total > 40 ? " Showing the first 40." : "") : "No books match “" + esc($("libSearch").value.trim()) + "”.") + "</p>";
+  hits.forEach(({ g, fin, rep }) => {
+    const reading = g.find(b => b.status === "reading"), queued = g.find(b => b.status === "tbr");
+    let meta = rep.pages ? fmtN(rep.pages) + " pages. " : "";
+    if (fin.length) {
+      meta += "Read " + fin.length + (fin.length === 1 ? " time" : " times") + (fin[0].fin ? ", most recently finished " + fmtDate(fin[0].fin) : "") + ". ";
+    } else meta += reading ? "Reading now." : "On your to-be-read list.";
+    let actions = "";
+    if (reading) actions = '<button class="btn" type="button" disabled>Reading now</button>';
+    else if (fin.length) {
+      actions = '<button class="btn solid" type="button" data-reread="' + rep.id + '" data-as="Reading">Re-read</button>' +
+                (queued ? "" : '<button class="btn" type="button" data-reread="' + rep.id + '" data-as="TBR">Read later</button>');
+      if (queued) meta += "Already on your to-be-read list.";
+    }
+    h += '<div class="result"><button class="thumb" type="button" data-open="' + rep.id + '" aria-label="Details for ' + esc(rep.title) + '"><span class="cover">' + coverHtml(rep) + "</span></button>" +
+         '<div><div class="rtitle">' + esc(rep.title) + '</div><div class="rmeta">' + esc(rep.author) + "</div>" +
+         '<div class="rmeta">' + meta + (fin.length && fin[0].rating != null ? " " + stars(fin[0].rating) : "") + "</div></div>" +
+         '<div class="ractions">' + actions + '</div><p class="err" role="alert"></p></div>';
+  });
+  $("results").innerHTML = h;
 }
 
 function openBook(id) {
@@ -766,10 +831,10 @@ function openBook(id) {
     b.fin ? ["Finished", fmtD(b.fin)] : null,
     days ? ["Pace", days] : null,
     b.rating != null ? ["Rating", stars(b.rating) + " " + b.rating.toFixed(1)] : null,
-    b.reads > 1 ? ["Logged", b.reads + " times"] : null
+    b.reread ? ["Reading", "Re-read (" + ordinal(b.nth) + " time)"] : (b.status === "finished" && b.reads > 1 ? ["Reading", "First of " + b.reads] : null)
   ].filter(Boolean);
   const dlg = $("dlg");
-  dlg.innerHTML = '<button class="close" type="button" aria-label="Close" data-close>×</button><div class="dlgbody"><div class="cover">' + coverHtml(b) + '</div><div><h3>' + esc(b.title) + '</h3><p class="by">' + esc(b.author) + "</p><dl>" +
+  dlg.innerHTML = '<button class="close" type="button" aria-label="Close" data-close>×</button><div class="dlgbody"><div class="cover">' + coverHtml(b) + '</div><div><h3>' + esc(b.title) + '</h3><p class="by">' + esc(b.author) + (b.reread ? ' <span class="flag">Re-read</span>' : "") + "</p><dl>" +
     rows.map(r => "<dt>" + r[0] + "</dt><dd>" + r[1] + "</dd>").join("") + "</dl>" + actionForm(b) + "</div></div>";
   openDlg(dlg);
 }
@@ -867,8 +932,8 @@ function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.hidden = false;
   clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000);
 }
-async function submitWrite(f, payload, apply, okMsg) {
-  const btn = f.querySelector('button[type="submit"]'), err = f.querySelector(".err"), label = btn.textContent;
+async function submitWrite(f, payload, apply, okMsg, btnOverride) {
+  const btn = btnOverride || f.querySelector('button[type="submit"]'), err = f.querySelector(".err"), label = btn.textContent;
   err.textContent = ""; btn.disabled = true; btn.textContent = "Saving…";
   try {
     if (S.demo) await new Promise(r => setTimeout(r, 150)); else await sheetWrite(payload);
@@ -878,8 +943,10 @@ async function submitWrite(f, payload, apply, okMsg) {
     render();
     toast(okMsg + (S.demo ? " Sample mode: nothing was sent to a sheet." : ""));
     if (!S.demo) setTimeout(() => load(), 26000);
+    return true;
   } catch (e) {
     err.textContent = writeError(e);
+    return false;
   } finally {
     btn.disabled = false; btn.textContent = label;
   }
@@ -918,9 +985,32 @@ async function handleTransition(f) {
   }, act === "start" ? "Started “" + b.title + "”." : "Finished “" + b.title + "”. Nicely done.");
 }
 
-function openAdd() {
+function quickReread(id, status, btn) {
+  const b = S.books.find(x => x.id === id); if (!b) return;
+  const okCover = /^https?:\/\//i.test(b.img);
+  if (!okCover || !(b.pages > 0)) { openAdd({ status, title: b.title, author: b.author, pages: b.pages > 0 ? b.pages : "", cover: okCover ? b.img : "" }); return; }
+  const p = { action: "add", status, title: b.title, author: b.author, pages: b.pages, cover: b.img, dateStarted: "", dateFinished: "", rating: null };
+  const msg = "Added “" + b.title + "” as a re-read. " + (status === "Reading" ? "It is on your Now reading card." : "It is on your to-be-read shelf.");
+  submitWrite(btn.closest(".result"), p, () => {
+    S.books.push({ id: S.books.reduce((a, x) => Math.max(a, x.id), -1) + 1, title: b.title, author: b.author, status: status === "Reading" ? "reading" : "tbr",
+      pages: b.pages, fin: null, start: null, rating: null, img: b.img });
+    S.shelf = status === "Reading" ? "reading" : "tbr";
+    $("libSearch").value = "";
+  }, msg, btn).then(ok => {
+    const el = $(status === "Reading" ? "now" : "shelfSection");
+    if (ok && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth" });
+  });
+}
+
+function openAdd(pre) {
   const f = $("addForm");
   f.reset(); f.querySelector(".err").textContent = ""; $("coverPrev").innerHTML = ""; $("ratingRow").hidden = true;
+  $("addHint").textContent = pre ? "Re-read: this book has no usable cover link or page count on record. Fill in what is missing, then add it." : "Saved as a new row in your Library tab. Fields marked * are required.";
+  if (pre) {
+    Object.keys(pre).forEach(k => { if (f.elements[k]) f.elements[k].value = pre[k]; });
+    f.elements.status.dispatchEvent(new Event("change"));
+    if (pre.cover) f.elements.cover.dispatchEvent(new Event("input"));
+  }
   $("writeNotice").hidden = S.demo || !!config().writeUrl;
   openDlg($("addDlg"));
 }
@@ -973,6 +1063,10 @@ document.addEventListener("click", e => {
   if (tab) { S.shelf = tab.dataset.tab; renderShelf(); return; }
   const go = t.closest("[data-goto]");
   if (go) { S.shelf = go.dataset.goto; renderShelf(); $("shelfSection").scrollIntoView({ behavior: "smooth" }); return; }
+  const rr = t.closest("[data-reread]");
+  if (rr) { quickReread(+rr.dataset.reread, rr.dataset.as, rr); return; }
+  const op = t.closest("[data-open]");
+  if (op) { openBook(+op.dataset.open); return; }
   const bk = t.closest(".book");
   if (bk) { openBook(+bk.dataset.id); return; }
   const cl = t.closest("[data-close]");
@@ -995,6 +1089,9 @@ document.addEventListener("error", e => {
   holder.innerHTML = clothHtml(b);
   img.replaceWith(holder.firstChild);
 }, true);
+
+$("libSearch").addEventListener("input", renderResults);
+$("libSearch").addEventListener("keydown", e => { if (e.key === "Escape") { e.target.value = ""; renderResults(); } });
 
 const addForm = $("addForm");
 addForm.elements.status.addEventListener("change", () => { $("ratingRow").hidden = addForm.elements.status.value !== "Finished"; });
