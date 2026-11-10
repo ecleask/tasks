@@ -253,7 +253,9 @@
   .thumb .cloth em { display: none; }
   .rtitle { font-family: var(--display); font-style: italic; font-weight: 600; font-size: 23px; line-height: 1.15; }
   .rmeta { color: var(--muted); font-size: 12.5px; }
-  .ractions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .ractions { display: flex; flex-wrap: wrap; gap: 8px 10px; justify-content: flex-end; align-items: flex-end; }
+  .ractions label.f { min-width: 150px; }
+  .ractions .btn, .act .btn { padding: 9px 16px; }
   .result .err { grid-column: 1 / -1; }
   @media (max-width: 640px) { #results .result { grid-template-columns: 58px 1fr; } .ractions { grid-column: 1 / -1; justify-content: flex-start; } }
 
@@ -806,7 +808,7 @@ function renderResults() {
     let actions = "";
     if (reading) actions = '<button class="btn" type="button" disabled>Reading now</button>';
     else if (fin.length) {
-      actions = '<button class="btn solid" type="button" data-reread="' + rep.id + '" data-as="Reading">Re-read</button>' +
+      actions = rrDateField() + '<button class="btn solid" type="button" data-reread="' + rep.id + '" data-as="Reading">Re-read</button>' +
                 (queued ? "" : '<button class="btn" type="button" data-reread="' + rep.id + '" data-as="TBR">Read later</button>');
       if (queued) meta += "Already on your to-be-read list.";
     }
@@ -818,6 +820,10 @@ function renderResults() {
   $("results").innerHTML = h;
 }
 
+function rrDateField() {
+  return '<label class="f">Date started<input type="date" class="rrdate" value="' + todayIso() + '"></label>';
+}
+
 function rereadButtons(b) {
   if (b.status !== "finished") return "";
   const g = S.books.filter(x => bookKey(x) === bookKey(b));
@@ -825,7 +831,7 @@ function rereadButtons(b) {
   let h = '<div class="act rrhost">';
   if (reading) h += '<button class="btn" type="button" disabled>Reading now</button>';
   else {
-    h += '<button class="btn solid" type="button" data-reread="' + b.id + '" data-as="Reading">Re-read</button>';
+    h += rrDateField() + '<button class="btn solid" type="button" data-reread="' + b.id + '" data-as="Reading">Re-read</button>';
     h += queued ? '<span class="rmeta">Already on your to-be-read list.</span>' : '<button class="btn" type="button" data-reread="' + b.id + '" data-as="TBR">Read later</button>';
   }
   return h + '<p class="err" role="alert"></p></div>';
@@ -1003,12 +1009,14 @@ async function handleTransition(f) {
 function quickReread(id, status, btn) {
   const b = S.books.find(x => x.id === id); if (!b) return;
   const okCover = /^https?:\/\//i.test(b.img);
-  if (!okCover || !(b.pages > 0)) { document.querySelectorAll("dialog").forEach(d => { if (d.open) closeDlg(d); }); openAdd({ status, title: b.title, author: b.author, pages: b.pages > 0 ? b.pages : "", cover: okCover ? b.img : "" }); return; }
-  const p = { action: "add", status, title: b.title, author: b.author, pages: b.pages, cover: b.img, dateStarted: "", dateFinished: "", rating: null };
+  const host = btn.closest(".rrhost"), dateIn = host && host.querySelector(".rrdate");
+  const dateStarted = status === "Reading" && dateIn ? dateIn.value : "";
+  if (!okCover || !(b.pages > 0)) { document.querySelectorAll("dialog").forEach(d => { if (d.open) closeDlg(d); }); openAdd({ status, title: b.title, author: b.author, pages: b.pages > 0 ? b.pages : "", cover: okCover ? b.img : "", dateStarted }); return; }
+  const p = { action: "add", status, title: b.title, author: b.author, pages: b.pages, cover: b.img, dateStarted, dateFinished: "", rating: null };
   const msg = "Added “" + b.title + "” as a re-read. " + (status === "Reading" ? "It is on your Now reading card." : "It is on your to-be-read shelf.");
   submitWrite(btn.closest(".rrhost"), p, () => {
     S.books.push({ id: S.books.reduce((a, x) => Math.max(a, x.id), -1) + 1, title: b.title, author: b.author, status: status === "Reading" ? "reading" : "tbr",
-      pages: b.pages, fin: null, start: null, rating: null, img: b.img });
+      pages: b.pages, fin: null, start: isoToDate(dateStarted), rating: null, img: b.img });
     S.shelf = status === "Reading" ? "reading" : "tbr";
     $("libSearch").value = "";
   }, msg, btn).then(ok => {
